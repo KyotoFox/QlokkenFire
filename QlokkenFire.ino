@@ -1,10 +1,12 @@
-#define WIFI_TIME_SYNC
+//#define WIFI_TIME_SYNC
 //#define RTC_TIME_SYNC
-#define NTP_TIME_SYNC
+//#define NTP_TIME_SYNC
 
 #ifndef WIFI_TIME_SYNC
+#ifdef NTP_TIME_SYNC
 #undef NTP_TIME_SYNC
 #warning WiFi has to be enabled to use NTP sync
+#endif
 #endif
 
 // Constants
@@ -130,10 +132,15 @@ void setup() {
   
   led.setIntensity(0, 15);
   led.setIntensity(1, 15);
+
+  //led.setScanLimit(0, 1);
+  //led.setScanLimit(1, 1);
   
   led.clearDisplay(0);
   led.clearDisplay(1);
   Serial.println("LED Initialized");
+
+  ledMapping();
 
 #ifdef RTC_TIME_SYNC
   // RTC
@@ -191,11 +198,6 @@ void setup() {
 
 uint16_t demoLys[] = {0,5,8,13,21,29,55,63,69,77,85,90,93,101,109,117,125,91,110};
 
-void printDef();
-
-uint16_t onLeds[114];
-uint8_t onIndex = 0;
-
 DateTime fakeTime = DateTime(1504393315);
 
 void loop() {
@@ -203,68 +205,99 @@ void loop() {
   writeDate(fakeTime);
   displayTime(fakeTime);
   fakeTime = DateTime(fakeTime.unixtime() + 60);
+}
 
-  return;
+// LED Mapping
+// Map words to ledIdx using serial
 
+// Usage:
+//  \n            Next LED
+//  .\n           Select LED
+//  <anything>\n  Print definition, clear display
+
+uint16_t onLeds[114];
+uint8_t onIndex = 0;
+
+void ledMapping() {
+  Serial.println("Started LED Mapping");
   
-
   uint16_t ledIdx = 0;
+  bool endWord = false;
 
-for(int m = 0; m<2; m++) {
-  for(int x = 0; x<8; x++) {
-    for(int y = 0; y<8; y++) {
+  for(int m = 0; m<2; m++) {
+    for(int x = 0; x<8; x++) {
+      for(int y = 0; y<8; y++) {
+        ledIdx++;
 
-      /*led.setLed(m, x, y, true);
+        // Display current led
+        led.setLed(m, x, y, true);
+  
+        bool on = false;
+        while(true) {
+          // Wait for data
+          if(Serial.available() == 0) {
+            continue;
+          }
+  
+          char res = Serial.read();
 
-      bool on = false;
-      while(true) {
-        if(Serial.available() == 0) {
-          //Serial.println("Nothing read");
-          continue;
+          if(res == '\n' || res == '\r') {
+            if(endWord) {
+              endWord = false;
+              printAndClearLedMapping();
+              led.clearDisplay(0);
+              led.clearDisplay(1);
+              on = false;
+            }
+            break;
+          }
+          // LED Name data (or dot)
+          else {
+            if(res == '.' || !endWord) {
+              on = true;
+              onLeds[onIndex++] = ledIdx;
+            }
+
+            if(res != '.') {
+              if(endWord == false) {
+                Serial.print("{");
+              }
+              Serial.print(res);
+              endWord = true;
+            }
+          }
         }
 
-        char res = Serial.read();
-        //Serial.print("Read: ");
-        //Serial.println(res);
+        led.setLed(m, x, y, on);
 
-        if(res == '\n' || res == '\r') {
-          break;
-        }
-        else {
-          on = true;
-          onLeds[onIndex++] = ledIdx;
-          printDef();
-          break;
-        }
-      }*/
-
-      bool on = false;
-      for(int i = 0; i<19; i++) {
-        if(ledIdx == demoLys[i]) {
-          on = true;
-        }
+        // Demolys
+        /*bool on = false;
+        for(int i = 0; i<19; i++) {
+          if(ledIdx - 1 == demoLys[i]) {
+            on = true;
+          }
+        }*/
       }
-
-
-      led.setLed(m, x, y, on);
-      ledIdx++; 
     }
   }
 }
-}
 
+void printAndClearLedMapping() {
 
-void printDef() {
-
-  Serial.print("INDEX:");
+  Serial.print(", {");
   for(int i = 0; i<onIndex; i++) {
     Serial.print(onLeds[i]);
-    Serial.print(",");
+    
+    if(i < (onIndex - 1))
+      Serial.print(",");
   }
-  Serial.println();
-  
+  Serial.println("}},");
+
+  memset(onLeds, 0, 114);
+  onIndex = 0;
 }
 
+// LED Time display
 void displayTime(DateTime time) {
 
   uint8_t m = time.hour();
@@ -461,6 +494,7 @@ void writeDate(DateTime now) {
 
 
 // NTP
+#ifdef NTP_TIME_SYNC
 void sendNTPpacket(IPAddress& address)
 {
   Serial.println("sending NTP packet...");
@@ -540,4 +574,4 @@ bool readNTP() {
     return true;
   }
 }
-
+#endif
