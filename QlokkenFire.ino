@@ -1,6 +1,6 @@
-//#define WIFI_TIME_SYNC
+#define WIFI_TIME_SYNC
 //#define RTC_TIME_SYNC
-//#define NTP_TIME_SYNC
+#define NTP_TIME_SYNC
 
 #ifndef WIFI_TIME_SYNC
 #ifdef NTP_TIME_SYNC
@@ -52,32 +52,44 @@ typedef struct {
 } display_def;
 
 display_def displayMap[] = {
-  {KLOKKEN_ER, {1, 2, 3, 4, 5, 6, 7, 8, 9}},
-  {FEM_OVER, {10, 11, 12,  13, 14, 15, 16}},
-  {FEM_PA,   {10, 11, 12,  17, 18}},
-  {TI_OVER,  {19, 20,      13, 14, 15, 16}},
-  {TI_PA,    {19, 20,      21, 22}},
-  {KVART_OVER,{23, 24, 25, 26, 27,      13, 14, 15, 16}},
-  {KVART_PA, {23, 24, 25, 26, 27,  28, 29}},
-  {HALV,     {30, 31, 32, 33}},
+  {KLOKKEN_ER, {70,78,86,94,102,110,111,118,126}},
+
+  //{FEM, {85,93,101}},
+  //{OVER, {7,15,23,31}},
+  //{(FEM_)PA, {69,125}} 
+  {FEM_OVER, {85,93,101,  7,15,23,31}},
+  {FEM_PA,   {85,93,101,  69,125}},
+
+  //{TI, {1,9}},
+  //{TI_PA, {25,33}},  
+  {TI_OVER,  {1,9,  7,15,23,31}},
+  {TI_PA,    {1,9,  25,33}},
+
+  //{KVART_PA, {8,16,24,32,40,  56,64}},
+  {KVART_OVER,{8,16,24,32,40,  7,15,23,31}},
+  {KVART_PA,  {8,16,24,32,40,  56,64}},
   
-  {ETT,     {34, 35, 36}},
-  {TO,     {37, 38}},
-  {TRE,     {39, 40, 41}},
-  {FIRE,     {42, 43, 44, 45}},  
-  {FEM,     {46, 47, 48}},
-  {SEKS,     {49, 50, 51, 52}},
-  {SYV,     {53, 54, 55}},
-  {ATTE,     {56, 57, 58, 59}},
-  {NI,     {60, 61}},
-  {TI,     {62, 63}},
-  {ELLEVE,     {64, 65, 66, 67, 68, 69}},
-  {TOLV,     {70, 71, 72, 73}},
+  {HALV, {6,14,22,30}},
   
-  {MIN_1,     {74}},
-  {MIN_2,     {75}},
-  {MIN_3,     {76}},
-  {MIN_4,     {77}},
+  {ETT, {5,13,21}},
+  {TO, {37,45}},
+  {TRE, {61,106,107}},
+  {FIRE, {4,12,20,28}},
+  {FEM, {36,44,52}},
+  {SEKS, {60,98,99,100}},
+  {SYV, {3,11,19}},
+  {ATTE, {27,35,43,51}},
+  {NI, {59,90}},
+  {TI, {91,92}},
+
+  {ELLEVE, {2,10,18,26,34,42}},
+  {TOLV, {58,82,83,84}},
+
+  // TODO:
+  {MIN_1,     {88}},
+  {MIN_2,     {89}},
+  {MIN_3,     {96}},
+  {MIN_4,     {97}},
 };
 
 // WiFi
@@ -140,7 +152,7 @@ void setup() {
   led.clearDisplay(1);
   Serial.println("LED Initialized");
 
-  ledMapping();
+  //ledMapping();
 
 #ifdef RTC_TIME_SYNC
   // RTC
@@ -200,11 +212,25 @@ uint16_t demoLys[] = {0,5,8,13,21,29,55,63,69,77,85,90,93,101,109,117,125,91,110
 
 DateTime fakeTime = DateTime(1504393315);
 
+DateTime dst(DateTime UTC) {
+  return DateTime(UTC.unixtime() + 3600 * 2);
+}
+
+bool firstDisplay = false;
+
 void loop() {
+  DateTime adjustedTime = dst(fakeTime);
+  
+  writeDate(adjustedTime);
+
+  // Update display at the top of the minute
+  if(fakeTime.second() == 0 || !firstDisplay) {
+    displayTime(adjustedTime);
+    firstDisplay = true;
+  }
+  
+  fakeTime = DateTime(fakeTime.unixtime() + 1);
   delay(1000);
-  writeDate(fakeTime);
-  displayTime(fakeTime);
-  fakeTime = DateTime(fakeTime.unixtime() + 60);
 }
 
 // LED Mapping
@@ -300,8 +326,8 @@ void printAndClearLedMapping() {
 // LED Time display
 void displayTime(DateTime time) {
 
-  uint8_t m = time.hour();
-  uint8_t h = time.minute();
+  uint8_t h = time.hour();
+  uint8_t m = time.minute();
 
   led.clearDisplay(0);
   led.clearDisplay(1);
