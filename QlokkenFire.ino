@@ -1,6 +1,6 @@
-#define WIFI_TIME_SYNC
+//#define WIFI_TIME_SYNC
 //#define RTC_TIME_SYNC
-#define NTP_TIME_SYNC
+//#define NTP_TIME_SYNC
 
 #ifndef WIFI_TIME_SYNC
 #ifdef NTP_TIME_SYNC
@@ -398,6 +398,16 @@ void displayTime(DateTime time) {
     case 1:
       displayWord(MIN_1);
   }
+
+  
+  led.setLed(0, 0, 0, true);
+  led.setLed(0, 0, 1, true);
+  led.setLed(0, 0, 2, true);
+  led.setLed(0, 0, 3, true);
+  led.setLed(0, 0, 4, true);
+  led.setLed(0, 0, 5, true);
+  led.setLed(0, 0, 6, true);
+  led.setLed(0, 0, 7, true);
 }
 
 void displayHour(uint8_t hour) {
