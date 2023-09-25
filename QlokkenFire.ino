@@ -153,8 +153,6 @@ void setup()
     led.clearDisplay(1);
     Serial.println("LED Initialized");
 
-    // ledMapping();
-
 #ifdef RTC_TIME_SYNC
     // RTC
     Serial.println("Starting RTC...");
@@ -240,110 +238,6 @@ void loop()
 
     fakeTime = DateTime(fakeTime.unixtime() + 1);
     delay(1000);
-}
-
-// LED Mapping
-// Map words to ledIdx using serial
-
-// Usage:
-//  \n            Next LED
-//  .\n           Select LED
-//  <anything>\n  Print definition, clear display
-
-uint16_t onLeds[114];
-uint8_t onIndex = 0;
-
-void ledMapping()
-{
-    Serial.println("Started LED Mapping");
-
-    uint16_t ledIdx = 0;
-    bool endWord = false;
-
-    for (int m = 0; m < 2; m++)
-    {
-        for (int x = 0; x < 8; x++)
-        {
-            for (int y = 0; y < 8; y++)
-            {
-                ledIdx++;
-
-                // Display current led
-                led.setLed(m, x, y, true);
-
-                bool on = false;
-                while (true)
-                {
-                    // Wait for data
-                    if (Serial.available() == 0)
-                    {
-                        continue;
-                    }
-
-                    char res = Serial.read();
-
-                    if (res == '\n' || res == '\r')
-                    {
-                        if (endWord)
-                        {
-                            endWord = false;
-                            printAndClearLedMapping();
-                            led.clearDisplay(0);
-                            led.clearDisplay(1);
-                            on = false;
-                        }
-                        break;
-                    }
-                    // LED Name data (or dot)
-                    else
-                    {
-                        if (res == '.' || !endWord)
-                        {
-                            on = true;
-                            onLeds[onIndex++] = ledIdx;
-                        }
-
-                        if (res != '.')
-                        {
-                            if (endWord == false)
-                            {
-                                Serial.print("{");
-                            }
-                            Serial.print(res);
-                            endWord = true;
-                        }
-                    }
-                }
-
-                led.setLed(m, x, y, on);
-
-                // Demolys
-                /*bool on = false;
-                for(int i = 0; i<19; i++) {
-                  if(ledIdx - 1 == demoLys[i]) {
-                    on = true;
-                  }
-                }*/
-            }
-        }
-    }
-}
-
-void printAndClearLedMapping()
-{
-
-    Serial.print(", {");
-    for (int i = 0; i < onIndex; i++)
-    {
-        Serial.print(onLeds[i]);
-
-        if (i < (onIndex - 1))
-            Serial.print(",");
-    }
-    Serial.println("}},");
-
-    memset(onLeds, 0, 114);
-    onIndex = 0;
 }
 
 // LED Time display
