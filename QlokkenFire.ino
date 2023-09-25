@@ -159,22 +159,21 @@ void setup()
     // RTC
     Serial.println("Starting RTC...");
 
-    if (!rtc.begin())
-    {
-        Serial.println("Couldn't find RTC");
-        while (1)
-            ;
+    if (!rtc.begin()) {
+        Serial.println("!! Couldn't find RTC");
+        rtc = NULL;
     }
+    else {
+        Serial.println("RTC Started");
 
-    Serial.println("RTC Started");
+        if (!rtc.isrunning())
+        {
+            Serial.println("RTC is NOT running!");
+            rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        }
 
-    if (!rtc.isrunning())
-    {
-        Serial.println("RTC is NOT running!");
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        Serial.println("RTC initialized!");
     }
-
-    Serial.println("RTC initialized!");
 #endif
 
 #ifdef WIFI_TIME_SYNC
