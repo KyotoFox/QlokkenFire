@@ -1,4 +1,4 @@
-// #define WIFI_TIME_SYNC
+//#define WIFI_TIME_SYNC
 // #define RTC_TIME_SYNC
 // #define NTP_TIME_SYNC
 
@@ -8,6 +8,10 @@
 #warning WiFi has to be enabled to use NTP sync
 #endif
 #endif
+
+// Programming pinout (Se bilde 2023-09-27)
+// TX,RX,GND
+// 2,3,4 (J2 fra pin 1 på top)
 
 // Constants
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -97,11 +101,39 @@ display_def displayMap[] = {
 #ifdef WIFI_TIME_SYNC
 #include <WiFi.h> //ESP8266 Core WiFi Library (you most likely already have this in your sketch)
 
-#include <DNSServer.h>        //Local DNS Server used for redirecting all requests to the configuration portal
-#include <ESP8266WebServer.h> //Local WebServer used to serve the configuration portal
+//#include <DNSServer.h>        //Local DNS Server used for redirecting all requests to the configuration portal
+//#include <ESP8266WebServer.h> //Local WebServer used to serve the configuration portal
 #include <WiFiManager.h>      //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
 
 WiFiManager wifiManager;
+
+// AceTime
+/*#include <AceWire.h> // TwoWireInterface
+#include <Wire.h> // TwoWire, Wire
+#include <AceTimeClock.h>
+#include <AceTime.h>
+
+using ace_time::clock::SystemClockLoop;
+using ace_time::clock::NtpClock;
+using ace_time::clock::DS3231Clock;
+
+using WireInterface = ace_wire::TwoWireInterface<TwoWire>;
+WireInterface wireInterface(Wire);
+DS3231Clock<WireInterface> dsClock(wireInterface);
+
+NtpClock ntpClock("no.pool.ntp.org");
+SystemClockLoop systemClock(&ntpClock /*reference*/, &dsClock /*backup*/);
+
+// Time zones
+#include <Preferences.h>
+Preferences preferences;
+
+static const int CACHE_SIZE = 1;
+static ace_time::ExtendedZoneProcessorCache<CACHE_SIZE> zoneProcessorCache;
+static ace_time::ExtendedZoneManager manager(
+    ace_time::zonedbx::kZoneAndLinkRegistrySize,
+    ace_time::zonedbx::kZoneAndLinkRegistry,
+    zoneProcessorCache);*/
 
 // NTP
 #ifdef NTP_TIME_SYNC
@@ -153,6 +185,23 @@ void setup()
     led.clearDisplay(1);
     Serial.println("LED Initialized");
 
+    // AceTime
+    /*Wire.begin();
+    wireInterface.begin();
+    dsClock.setup();
+    ntpClock.setup();
+    systemClock.setup();
+
+    // Prep time zone
+    char timeZone[100];
+    preferences.begin("qlokkenfire", false); 
+    preferences.getString("tz", timeZone, 100);
+
+    ace_time::TimeZone localTz = manager.createForZoneName("Europe/Oslo");
+
+    ace_time::acetime_t now = systemClock.getNow();
+    auto localNow = ace_time::ZonedDateTime::forEpochSeconds(now, localTz);*/
+
 #ifdef RTC_TIME_SYNC
     // RTC
     Serial.println("Starting RTC...");
@@ -177,6 +226,11 @@ void setup()
 #ifdef WIFI_TIME_SYNC
     // WiFi
     Serial.println("Connecting to WiFi...");
+
+    /*char *timezone = "Europe/Oslo";
+    WiFiManagerParameter timezone_config_field("tz", "Time Zone (IATA Identifier)", timezone, 100);
+    wifiManager.addParameter(&timezone_config_field);*/
+
     wifiManager.autoConnect("QlokkenFire");
     Serial.println("WiFi connection established!");
 
@@ -329,15 +383,6 @@ void displayTime(DateTime time)
     case 1:
         displayWord(MIN_1);
     }
-
-    led.setLed(0, 0, 0, true);
-    led.setLed(0, 0, 1, true);
-    led.setLed(0, 0, 2, true);
-    led.setLed(0, 0, 3, true);
-    led.setLed(0, 0, 4, true);
-    led.setLed(0, 0, 5, true);
-    led.setLed(0, 0, 6, true);
-    led.setLed(0, 0, 7, true);
 }
 
 void displayHour(uint8_t hour)
