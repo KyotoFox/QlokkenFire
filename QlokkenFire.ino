@@ -280,7 +280,7 @@ void setup()
 
     bool btnHeld = (frem == 0 || tilbake == 0);
     if(btnHeld) {
-        Serial.println("Requesting configuration")
+        Serial.println("Requesting configuration");
         wifiManager.startConfigPortal(ssidStr);
     }
     else {
@@ -377,8 +377,43 @@ DateTime dst(DateTime UTC)
 
 bool firstDisplay = false;
 
+int brightness = 15;
+
 void loop()
 {
+    int frem = digitalRead(25);
+    int tilbake = digitalRead(26);
+
+    // Change brightness
+    int brightnessChange = 0;
+
+    if(frem == 0) {
+        brightnessChange++;
+    }
+    else if(tilbake == 0) {
+        brightnessChange--;
+    }
+
+    if(brightnessChange != 0) {
+
+        brightness += brightnessChange;
+        if(brightness > 15) {
+            brightness = 15;
+        }
+        if(brightness < 0) {
+            brightness = 0;
+        }
+
+        Serial.print("Setting brightness: ");
+        Serial.println(brightness);
+
+        led.setIntensity(0, brightness);
+        led.setIntensity(1, brightness);
+
+        delay(50);
+    }
+
+
     systemClock.loop();
 
     ace_time::acetime_t systemNow = systemClock.getNow();
