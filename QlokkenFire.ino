@@ -1,4 +1,4 @@
-//#define WIFI_TIME_SYNC
+#define WIFI_TIME_SYNC
 // #define RTC_TIME_SYNC
 // #define NTP_TIME_SYNC
 
@@ -122,7 +122,7 @@ WireInterface wireInterface(Wire);
 DS3231Clock<WireInterface> dsClock(wireInterface);
 
 NtpClock ntpClock("no.pool.ntp.org");
-SystemClockLoop systemClock(&ntpClock /*reference*/, &dsClock /*backup*/);
+SystemClockLoop systemClock(&ntpClock, &dsClock);
 
 // Time zones
 #include <Preferences.h>
@@ -145,14 +145,16 @@ IPAddress timeServerIP; // time.nist.gov NTP server address
 const char *ntpServerName = "no.pool.ntp.org";
 const int NTP_PACKET_SIZE = 48;     // NTP time stamp is in the first 48 bytes of the message
 byte packetBuffer[NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
-#endif
-#endif
+#endif // NTP_TIME_SYNC
+#endif // WIFI_TIME_SYNC
 
 // RTC
-#include "RTClib.h"
+#include "RTClib.h" // Has DateTime
 
 #ifdef RTC_TIME_SYNC
-RTC_DS1307 rtc;
+
+    RTC_DS1307 rtc;
+
 #endif
 
 // LED Matrix
@@ -164,6 +166,8 @@ int maxMosi = 23;
 int maxCount = 2;
 
 LedControl led = LedControl(maxMosi, maxClk, maxLoad, maxCount);
+
+char timezoneSetting[100];
 
 void setup()
 {
@@ -227,11 +231,10 @@ void setup()
     // WiFi
     Serial.println("Connecting to WiFi...");
 
-    /*char *timezone = "Europe/Oslo";
-    WiFiManagerParameter timezone_config_field("tz", "Time Zone (IATA Identifier)", timezone, 100);
-    wifiManager.addParameter(&timezone_config_field);*/
+    WiFiManagerParameter timezone_config_field("tz", "Time Zone (IATA Identifier)", timezoneSetting, 100);
+    wifiManager.addParameter(&timezone_config_field);
 
-    wifiManager.autoConnect("QlokkenFire");
+    wifiManager.autoConnect("QlokkenFire #3");
     Serial.println("WiFi connection established!");
 
 #ifdef NTP_TIME_SYNC
