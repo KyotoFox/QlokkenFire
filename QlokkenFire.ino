@@ -15,7 +15,7 @@
 // 2,3,4 (J2 fra pin 1 på top)
 
 // Constants
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+char daysOfTheWeek[7][12] = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
 
 // Display
 typedef enum
@@ -141,7 +141,6 @@ WiFiManager wifiManager;
         ace_time::zonedbx::kZoneAndLinkRegistry,
         zoneProcessorCache);
 
-    static ace_time::BasicZoneProcessor pacificProcessor;
 #endif
 
 // NTP
@@ -344,36 +343,24 @@ DateTime dst(DateTime UTC)
 
 bool firstDisplay = false;
 
-
-void printCurrentTime() {
-  acetime_t now = systemClock.getNow();
-
-  // Create a time
-  auto pacificTz = ace_time::TimeZone::forZoneInfo(&ace_time::zonedb::kZoneAmerica_Los_Angeles,
-      &pacificProcessor);
-  auto pacificTime = ace_time::ZonedDateTime::forEpochSeconds(now, pacificTz);
-
-  Serial.print("LA time is: ");
-  pacificTime.printTo(Serial);
-  Serial.println();
-}
-
 void loop()
 {
     systemClock.loop();
 
-    printCurrentTime();
+    ace_time::acetime_t systemNow = systemClock.getNow();
+    ace_time::ZonedDateTime localNow = ace_time::ZonedDateTime::forEpochSeconds(systemNow, localTz);
 
-    ace_time::acetime_t now = systemClock.getNow();
-    ace_time::ZonedDateTime localNow = ace_time::ZonedDateTime::forEpochSeconds(now, localTz);
-
-    Serial.print(F("AceLoop is: "));
+    Serial.print(F("SystemClock: "));
     localNow.printTo(Serial);
     Serial.println();
 
-    Serial.print(F("Now is: "));
-    Serial.print(now);
+    ace_time::acetime_t rtcNow = dsClock.getNow();
+    ace_time::ZonedDateTime localRtc = ace_time::ZonedDateTime::forEpochSeconds(rtcNow, localTz);
+
+    Serial.print(F("RTCClock: "));
+    localRtc.printTo(Serial);
     Serial.println();
+
 
     /*Serial.print("Fetching NTP. Wifi is ");
     Serial.println(WiFi.status());
@@ -383,23 +370,20 @@ void loop()
     Serial.println(ntpNow);*/
 
 
-    DateTime adjustedTime = dst(fakeTime);
-
-    writeDate(adjustedTime);
+    writeDate(localNow);
 
     // Update display at the top of the minute
-    if (fakeTime.second() == 0 || !firstDisplay)
+    if (localNow.second() == 0 || !firstDisplay)
     {
-        displayTime(adjustedTime);
+        displayTime(localNow);
         firstDisplay = true;
     }
-
-    fakeTime = DateTime(fakeTime.unixtime() + 1);
+    
     delay(1000);
 }
 
 // LED Time display
-void displayTime(DateTime time)
+void displayTime(ace_time::ZonedDateTime time)
 {
 
     uint8_t h = time.hour();
@@ -593,18 +577,15 @@ void displayWord(WORDS displayWord)
 }
 
 // Time
-void writeDate(DateTime now)
+void writeDate(ace_time::ZonedDateTime now)
 {
-    // Print RTC
-    // DateTime now = rtc.now();
-
     Serial.print(now.year(), DEC);
     Serial.print('/');
     Serial.print(now.month(), DEC);
     Serial.print('/');
     Serial.print(now.day(), DEC);
     Serial.print(" (");
-    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
+    Serial.print(daysOfTheWeek[now.dayOfWeek()]);
     Serial.print(") ");
     Serial.print(now.hour(), DEC);
     Serial.print(':');
