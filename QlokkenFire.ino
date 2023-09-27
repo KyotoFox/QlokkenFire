@@ -96,6 +96,8 @@ display_def displayMap[] = {
     {MIN_2, {89}},
     {MIN_3, {96}},
     {MIN_4, {97}},
+
+    {ZAP, {68,108,124}},
 };
 
 // WiFi
@@ -204,6 +206,12 @@ void setup()
     led.clearDisplay(1);
     Serial.println("LED Initialized");
 
+    //ledMapping();
+
+
+    // ZAP while connecting
+    displayWord(ZAP);
+
 
     // Preferences
     Serial.println("Getting preferences...");
@@ -212,6 +220,11 @@ void setup()
     preferences.begin("qlokkenfire", false); 
     String storedTz = preferences.getString("tz", "Europe/Oslo");
     uint16_t serial = preferences.getUShort("serial", 0);
+
+    if(serial == 0) {
+        serial = 1;
+        preferences.putUShort("serial", serial);
+    }
 
     Serial.print("Loaded serial: ");
     Serial.println(serial);
@@ -251,7 +264,28 @@ void setup()
 
     String ssid = "QlokkenFire #";
     ssid += serial;
-    wifiManager.autoConnect(ssid.c_str());
+
+    const char *ssidStr = ssid.c_str();
+
+    pinMode(25, INPUT);
+    pinMode(26, INPUT);
+
+    int frem = digitalRead(25);
+    int tilbake = digitalRead(26);
+
+    Serial.print("Button state: ");
+    Serial.print(frem);
+    Serial.print(", ");
+    Serial.println(tilbake);
+
+    bool btnHeld = (frem == 0 || tilbake == 0);
+    if(btnHeld) {
+        Serial.println("Requesting configuration")
+        wifiManager.startConfigPortal(ssidStr);
+    }
+    else {
+        wifiManager.autoConnect(ssidStr);
+    }
 
     Serial.println("WiFi connection established!");
 
@@ -354,13 +388,12 @@ void loop()
     localNow.printTo(Serial);
     Serial.println();
 
-    ace_time::acetime_t rtcNow = dsClock.getNow();
+    /*ace_time::acetime_t rtcNow = dsClock.getNow();
     ace_time::ZonedDateTime localRtc = ace_time::ZonedDateTime::forEpochSeconds(rtcNow, localTz);
 
     Serial.print(F("RTCClock: "));
     localRtc.printTo(Serial);
-    Serial.println();
-
+    Serial.println();*/
 
     /*Serial.print("Fetching NTP. Wifi is ");
     Serial.println(WiFi.status());
@@ -369,20 +402,26 @@ void loop()
     Serial.print("Got it: ");
     Serial.println(ntpNow);*/
 
+    if(systemNow == ace_time::LocalTime::kInvalidSeconds) {
+        Serial.println("Has no time yet...");
+    }
+    else {
+        writeDate(localNow);
 
-    writeDate(localNow);
-
-    // Update display at the top of the minute
-    if (localNow.second() == 0 || !firstDisplay)
-    {
-        displayTime(localNow);
-        firstDisplay = true;
+        // Update display at the top of the minute
+        if (localNow.second() == 0 || !firstDisplay)
+        {
+            displayTime(localNow);
+            firstDisplay = true;
+        }
     }
     
     delay(1000);
 }
 
 // LED Time display
+//#define DEBUG_TIME_DECODING
+
 void displayTime(ace_time::ZonedDateTime time)
 {
 
@@ -531,15 +570,19 @@ void displayHour(uint8_t hour)
 
 void displayWord(WORDS displayWord)
 {
-    Serial.print("Displaying word: ");
-    Serial.println(displayWord);
+    #ifdef DEBUG_TIME_DECODING
+        Serial.print("Displaying word: ");
+        Serial.println(displayWord);
+    #endif
 
     // Find the word definition
     for (uint8_t i = 0; i < (sizeof(displayMap) / sizeof(displayMap[0])); i++)
     {
         if (displayWord == displayMap[i].wordname)
         {
-            Serial.println("> Found definition");
+            #ifdef DEBUG_TIME_DECODING
+                Serial.println("> Found definition");
+            #endif
 
             // Find the leds to turn on
             for (uint8_t t = 0; t < (sizeof(displayMap[0].leds) / sizeof(displayMap[0].leds[0])); t++)
@@ -551,9 +594,11 @@ void displayWord(WORDS displayWord)
                 }
                 ledIdx -= 1;
 
-                Serial.print("> Turning on LED ");
-                Serial.print(ledIdx);
-                Serial.print(": ");
+                #ifdef DEBUG_TIME_DECODING
+                    Serial.print("> Turning on LED ");
+                    Serial.print(ledIdx);
+                    Serial.print(": ");
+                #endif
 
                 // Decode matrix/row/col
                 uint8_t matrix = ledIdx / 64;
@@ -565,13 +610,18 @@ void displayWord(WORDS displayWord)
                 uint8_t col = ledIdx;
 
                 // Turn on LED
-                Serial.print(matrix);
-                Serial.print(", ");
-                Serial.print(row);
-                Serial.print(", ");
-                Serial.println(col);
+                #ifdef DEBUG_TIME_DECODING
+                    Serial.print(matrix);
+                    Serial.print(", ");
+                    Serial.print(row);
+                    Serial.print(", ");
+                    Serial.println(col);
+                #endif
+
                 led.setLed(matrix, row, col, true);
             }
+
+            break;
         }
     }
 }
@@ -681,3 +731,109 @@ bool readNTP()
     }
 }
 #endif
+
+
+// LED Mapping
+// Map words to ledIdx using serial
+
+// Usage:
+//  \n            Next LED
+//  .\n           Select LED
+//  <anything>\n  Print definition, clear display
+
+uint16_t onLeds[114];
+uint8_t onIndex = 0;
+
+void ledMapping()
+{
+    Serial.println("Started LED Mapping");
+
+    uint16_t ledIdx = 0;
+    bool endWord = false;
+
+    for (int m = 0; m < 2; m++)
+    {
+        for (int x = 0; x < 8; x++)
+        {
+            for (int y = 0; y < 8; y++)
+            {
+                ledIdx++;
+
+                // Display current led
+                led.setLed(m, x, y, true);
+
+                bool on = false;
+                while (true)
+                {
+                    // Wait for data
+                    if (Serial.available() == 0)
+                    {
+                        continue;
+                    }
+
+                    char res = Serial.read();
+
+                    if (res == '\n' || res == '\r')
+                    {
+                        if (endWord)
+                        {
+                            endWord = false;
+                            printAndClearLedMapping();
+                            led.clearDisplay(0);
+                            led.clearDisplay(1);
+                            on = false;
+                        }
+                        break;
+                    }
+                    // LED Name data (or dot)
+                    else
+                    {
+                        if (res == '.' || !endWord)
+                        {
+                            on = true;
+                            onLeds[onIndex++] = ledIdx;
+                        }
+
+                        if (res != '.')
+                        {
+                            if (endWord == false)
+                            {
+                                Serial.print("{");
+                            }
+                            Serial.print(res);
+                            endWord = true;
+                        }
+                    }
+                }
+
+                led.setLed(m, x, y, on);
+
+                // Demolys
+                /*bool on = false;
+                for(int i = 0; i<19; i++) {
+                  if(ledIdx - 1 == demoLys[i]) {
+                    on = true;
+                  }
+                }*/
+            }
+        }
+    }
+}
+
+void printAndClearLedMapping()
+{
+
+    Serial.print(", {");
+    for (int i = 0; i < onIndex; i++)
+    {
+        Serial.print(onLeds[i]);
+
+        if (i < (onIndex - 1))
+            Serial.print(",");
+    }
+    Serial.println("}},");
+
+    memset(onLeds, 0, 114);
+    onIndex = 0;
+}
+
