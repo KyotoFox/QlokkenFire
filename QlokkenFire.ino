@@ -1,6 +1,7 @@
 #define WIFI_TIME_SYNC
 // #define RTC_TIME_SYNC
 // #define NTP_TIME_SYNC
+#define QF_USE_ACETIME
 
 #ifndef WIFI_TIME_SYNC
 #ifdef NTP_TIME_SYNC
@@ -108,34 +109,43 @@ display_def displayMap[] = {
 WiFiManager wifiManager;
 
 // AceTime
-/*#include <AceWire.h> // TwoWireInterface
-#include <Wire.h> // TwoWire, Wire
-#include <AceTimeClock.h>
-#include <AceTime.h>
+#ifdef QF_USE_ACETIME
+    
+    #define ACE_TIME_NTP_CLOCK_DEBUG 5
 
-using ace_time::clock::SystemClockLoop;
-using ace_time::clock::NtpClock;
-using ace_time::clock::DS3231Clock;
+    #include <AceWire.h> // TwoWireInterface
+    #include <Wire.h> // TwoWire, Wire
+    #include <AceTimeClock.h>
+    #include <AceTime.h>
 
-using WireInterface = ace_wire::TwoWireInterface<TwoWire>;
-WireInterface wireInterface(Wire);
-DS3231Clock<WireInterface> dsClock(wireInterface);
+    using ace_time::clock::SystemClockLoop;
+    using ace_time::clock::NtpClock;
+    using ace_time::clock::DS3231Clock;
+    using ace_time::acetime_t;
 
-NtpClock ntpClock("no.pool.ntp.org");
-SystemClockLoop systemClock(&ntpClock, &dsClock);
+    using WireInterface = ace_wire::TwoWireInterface<TwoWire>;
+    WireInterface wireInterface(Wire);
+    DS3231Clock<WireInterface> dsClock(wireInterface);
 
-// Time zones
-#include <Preferences.h>
-Preferences preferences;
+    NtpClock ntpClock("no.pool.ntp.org");
+    SystemClockLoop systemClock(&ntpClock, &dsClock);
 
-static const int CACHE_SIZE = 1;
-static ace_time::ExtendedZoneProcessorCache<CACHE_SIZE> zoneProcessorCache;
-static ace_time::ExtendedZoneManager manager(
-    ace_time::zonedbx::kZoneAndLinkRegistrySize,
-    ace_time::zonedbx::kZoneAndLinkRegistry,
-    zoneProcessorCache);*/
+    // Time zones
+    #include <Preferences.h>
+    Preferences preferences;
+
+    static const int CACHE_SIZE = 1;
+    static ace_time::ExtendedZoneProcessorCache<CACHE_SIZE> zoneProcessorCache;
+    static ace_time::ExtendedZoneManager manager(
+        ace_time::zonedbx::kZoneAndLinkRegistrySize,
+        ace_time::zonedbx::kZoneAndLinkRegistry,
+        zoneProcessorCache);
+
+    static ace_time::BasicZoneProcessor pacificProcessor;
+#endif
 
 // NTP
+/*
 #ifdef NTP_TIME_SYNC
 #include <WiFiUdp.h>
 
@@ -146,7 +156,11 @@ const char *ntpServerName = "no.pool.ntp.org";
 const int NTP_PACKET_SIZE = 48;     // NTP time stamp is in the first 48 bytes of the message
 byte packetBuffer[NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
 #endif // NTP_TIME_SYNC
+*/
+
 #endif // WIFI_TIME_SYNC
+
+
 
 // RTC
 #include "RTClib.h" // Has DateTime
@@ -169,6 +183,8 @@ LedControl led = LedControl(maxMosi, maxClk, maxLoad, maxCount);
 
 char timezoneSetting[100];
 
+ace_time::TimeZone localTz;
+
 void setup()
 {
     // Debug
@@ -189,22 +205,22 @@ void setup()
     led.clearDisplay(1);
     Serial.println("LED Initialized");
 
-    // AceTime
-    /*Wire.begin();
-    wireInterface.begin();
-    dsClock.setup();
-    ntpClock.setup();
-    systemClock.setup();
 
-    // Prep time zone
+    // Preferences
+    Serial.println("Getting preferences...");
+
     char timeZone[100];
     preferences.begin("qlokkenfire", false); 
-    preferences.getString("tz", timeZone, 100);
+    String storedTz = preferences.getString("tz", "Europe/Oslo");
+    uint16_t serial = preferences.getUShort("serial", 0);
 
-    ace_time::TimeZone localTz = manager.createForZoneName("Europe/Oslo");
+    Serial.print("Loaded serial: ");
+    Serial.println(serial);
 
-    ace_time::acetime_t now = systemClock.getNow();
-    auto localNow = ace_time::ZonedDateTime::forEpochSeconds(now, localTz);*/
+    Serial.print("Loaded timezone: ");
+    Serial.println(storedTz);
+
+
 
 #ifdef RTC_TIME_SYNC
     // RTC
@@ -234,10 +250,58 @@ void setup()
     WiFiManagerParameter timezone_config_field("tz", "Time Zone (IATA Identifier)", timezoneSetting, 100);
     wifiManager.addParameter(&timezone_config_field);
 
-    wifiManager.autoConnect("QlokkenFire #3");
+    String ssid = "QlokkenFire #";
+    ssid += serial;
+    wifiManager.autoConnect(ssid.c_str());
+
     Serial.println("WiFi connection established!");
 
-#ifdef NTP_TIME_SYNC
+
+    // AceTime
+    #ifdef QF_USE_ACETIME
+    Serial.println("Starting AceTime");
+
+    Wire.begin();
+
+    Serial.println("Starting wireInterface");
+    wireInterface.begin();
+
+    Serial.println("Starting dsClock");
+    dsClock.setup();
+
+    Serial.println("Starting ntpClock");
+    ntpClock.setup();
+
+    Serial.println("Starting systemClock");
+    systemClock.setup();
+
+
+    localTz = manager.createForZoneName(storedTz.c_str());
+    if(localTz.isError()) {
+        Serial.println("Failed to load stored TZ");
+        
+        localTz = manager.createForZoneName("Europe/Oslo");
+        if(localTz.isError()) {
+            Serial.println("Really failed to load TZ");
+        }
+    }
+    else {
+        Serial.println("Loaded tz database");
+    }
+
+    ace_time::acetime_t now = systemClock.getNow();
+    ace_time::ZonedDateTime localNow = ace_time::ZonedDateTime::forEpochSeconds(now, localTz);
+
+    Serial.print(F("AceTime is: "));
+    localNow.printTo(Serial);
+    Serial.println();
+
+    #endif
+
+
+
+
+/*#ifdef NTP_TIME_SYNC
     Serial.println("Starting NTP UDP...");
     udp.begin(2390);
     Serial.println("UDP OK");
@@ -265,7 +329,7 @@ void setup()
             delay(1000);
         }
     }
-#endif
+#endif*/
 #endif
 }
 
@@ -280,8 +344,45 @@ DateTime dst(DateTime UTC)
 
 bool firstDisplay = false;
 
+
+void printCurrentTime() {
+  acetime_t now = systemClock.getNow();
+
+  // Create a time
+  auto pacificTz = ace_time::TimeZone::forZoneInfo(&ace_time::zonedb::kZoneAmerica_Los_Angeles,
+      &pacificProcessor);
+  auto pacificTime = ace_time::ZonedDateTime::forEpochSeconds(now, pacificTz);
+
+  Serial.print("LA time is: ");
+  pacificTime.printTo(Serial);
+  Serial.println();
+}
+
 void loop()
 {
+    systemClock.loop();
+
+    printCurrentTime();
+
+    ace_time::acetime_t now = systemClock.getNow();
+    ace_time::ZonedDateTime localNow = ace_time::ZonedDateTime::forEpochSeconds(now, localTz);
+
+    Serial.print(F("AceLoop is: "));
+    localNow.printTo(Serial);
+    Serial.println();
+
+    Serial.print(F("Now is: "));
+    Serial.print(now);
+    Serial.println();
+
+    /*Serial.print("Fetching NTP. Wifi is ");
+    Serial.println(WiFi.status());
+    acetime_t ntpNow = ntpClock.getNow();
+
+    Serial.print("Got it: ");
+    Serial.println(ntpNow);*/
+
+
     DateTime adjustedTime = dst(fakeTime);
 
     writeDate(adjustedTime);
