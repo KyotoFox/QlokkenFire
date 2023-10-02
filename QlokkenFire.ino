@@ -186,6 +186,8 @@ char timezoneSetting[100];
 
 ace_time::TimeZone localTz;
 
+int brightness = 15;
+
 void setup()
 {
     // Debug
@@ -195,9 +197,6 @@ void setup()
     // LED Init
     led.shutdown(0, false);
     led.shutdown(1, false);
-
-    led.setIntensity(0, 15);
-    led.setIntensity(1, 15);
 
     // led.setScanLimit(0, 1);
     // led.setScanLimit(1, 1);
@@ -209,20 +208,19 @@ void setup()
     //ledMapping();
 
 
-    // ZAP while connecting
-    displayWord(ZAP);
-
-
     // Preferences
     Serial.println("Getting preferences...");
 
-    char timeZone[100];
     preferences.begin("qlokkenfire", false); 
     String storedTz = preferences.getString("tz", "Europe/Oslo");
     uint16_t serial = preferences.getUShort("serial", 0);
+    brightness = preferences.getUShort("brightness", 15);
 
     if(serial == 0) {
-        serial = 1;
+
+
+        serial = 4;
+        
         preferences.putUShort("serial", serial);
     }
 
@@ -231,6 +229,17 @@ void setup()
 
     Serial.print("Loaded timezone: ");
     Serial.println(storedTz);
+
+    Serial.print("Loaded brightness: ");
+    Serial.println(brightness);
+
+
+    // Set initial state
+    led.setIntensity(0, brightness);
+    led.setIntensity(1, brightness);
+
+    // ZAP while connecting
+    displayWord(ZAP);
 
 
 
@@ -259,7 +268,7 @@ void setup()
     // WiFi
     Serial.println("Connecting to WiFi...");
 
-    WiFiManagerParameter timezone_config_field("tz", "Time Zone (IATA Identifier)", timezoneSetting, 100);
+    WiFiManagerParameter timezone_config_field("tz", "Time Zone (IANA/tzdb Identifier)", storedTz.c_str(), 100);
     wifiManager.addParameter(&timezone_config_field);
 
     String ssid = "QlokkenFire #";
@@ -282,12 +291,24 @@ void setup()
     if(btnHeld) {
         Serial.println("Requesting configuration");
         wifiManager.startConfigPortal(ssidStr);
+
+        // TODO: Do we need autoconnect after here?
     }
     else {
         wifiManager.autoConnect(ssidStr);
     }
 
     Serial.println("WiFi connection established!");
+
+    // Check if timezone was set
+    char configuredTz[100];
+    const char* configuredTzValue = timezone_config_field.getValue();
+    strncpy(configuredTz, configuredTzValue, sizeof(configuredTz));
+
+    preferences.putString("tz", configuredTz);
+
+    Serial.print("Time zone after wifi setup: ");
+    Serial.println(configuredTz);
 
 
     // AceTime
@@ -309,7 +330,7 @@ void setup()
     systemClock.setup();
 
 
-    localTz = manager.createForZoneName(storedTz.c_str());
+    localTz = manager.createForZoneName(configuredTz);
     if(localTz.isError()) {
         Serial.println("Failed to load stored TZ");
         
@@ -377,8 +398,6 @@ DateTime dst(DateTime UTC)
 
 bool firstDisplay = false;
 
-int brightness = 15;
-
 void loop()
 {
     int frem = digitalRead(25);
@@ -395,63 +414,73 @@ void loop()
     }
 
     if(brightnessChange != 0) {
-
-        brightness += brightnessChange;
-        if(brightness > 15) {
-            brightness = 15;
+        int newBrightness = brightness + brightnessChange;
+        if(newBrightness > 15) {
+            newBrightness = 15;
         }
-        if(brightness < 0) {
-            brightness = 0;
+        if(newBrightness < 0) {
+            newBrightness = 0;
         }
 
-        Serial.print("Setting brightness: ");
-        Serial.println(brightness);
+        if(newBrightness != brightness) {
+            brightness = newBrightness;
 
-        led.setIntensity(0, brightness);
-        led.setIntensity(1, brightness);
+            Serial.print("Setting brightness: ");
+            Serial.println(brightness);
 
-        delay(50);
+            preferences.putUShort("brightness", (uint16_t)brightness);
+
+            led.setIntensity(0, brightness);
+            led.setIntensity(1, brightness);
+        }
+
+        delay(100);
     }
 
 
     systemClock.loop();
 
-    ace_time::acetime_t systemNow = systemClock.getNow();
-    ace_time::ZonedDateTime localNow = ace_time::ZonedDateTime::forEpochSeconds(systemNow, localTz);
+    static unsigned long lastTimeLog = 0;
 
-    Serial.print(F("SystemClock: "));
-    localNow.printTo(Serial);
-    Serial.println();
+    unsigned long nowMillis = millis();
+    if((nowMillis - lastTimeLog) >= 1000) {
+        lastTimeLog = nowMillis;
 
-    /*ace_time::acetime_t rtcNow = dsClock.getNow();
-    ace_time::ZonedDateTime localRtc = ace_time::ZonedDateTime::forEpochSeconds(rtcNow, localTz);
+        ace_time::acetime_t systemNow = systemClock.getNow();
+        ace_time::ZonedDateTime localNow = ace_time::ZonedDateTime::forEpochSeconds(systemNow, localTz);
 
-    Serial.print(F("RTCClock: "));
-    localRtc.printTo(Serial);
-    Serial.println();*/
+        Serial.print(F("SystemClock: "));
+        localNow.printTo(Serial);
+        Serial.println();
 
-    /*Serial.print("Fetching NTP. Wifi is ");
-    Serial.println(WiFi.status());
-    acetime_t ntpNow = ntpClock.getNow();
+        /*ace_time::acetime_t rtcNow = dsClock.getNow();
+        ace_time::ZonedDateTime localRtc = ace_time::ZonedDateTime::forEpochSeconds(rtcNow, localTz);
 
-    Serial.print("Got it: ");
-    Serial.println(ntpNow);*/
+        Serial.print(F("RTCClock: "));
+        localRtc.printTo(Serial);
+        Serial.println();*/
 
-    if(systemNow == ace_time::LocalTime::kInvalidSeconds) {
-        Serial.println("Has no time yet...");
-    }
-    else {
-        writeDate(localNow);
+        /*Serial.print("Fetching NTP. Wifi is ");
+        Serial.println(WiFi.status());
+        acetime_t ntpNow = ntpClock.getNow();
 
-        // Update display at the top of the minute
-        if (localNow.second() == 0 || !firstDisplay)
-        {
-            displayTime(localNow);
-            firstDisplay = true;
+        Serial.print("Got it: ");
+        Serial.println(ntpNow);*/
+
+        if(systemNow == ace_time::LocalTime::kInvalidSeconds) {
+            Serial.println("Has no time yet...");
+        }
+        else {
+            writeDate(localNow);
+
+            // Update display at the top of the minute
+            if (localNow.second() == 0 || !firstDisplay)
+            {
+                displayTime(localNow);
+                firstDisplay = true;
+            }
         }
     }
-    
-    delay(1000);
 }
 
 // LED Time display
